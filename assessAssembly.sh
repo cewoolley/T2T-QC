@@ -9,14 +9,17 @@ ASM="hap2-dualscaff.fa"      # Swap to hap2.fa for second run
 REF="chm13v2.0.fa"
 NAME=$(basename "$ASM" .fa)  # e.g., hap1
 
+UID=$(id -u)
+GID=$(id -g)
+
 echo "Running T2T assessment for $ASM..."
 
 # Task 1: formatAssembly (seqtk) - rewrap to single-line FASTA
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data quay.io/biocontainers/seqtk:1.3--hed695b0_2 \
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data quay.io/biocontainers/seqtk:1.3--hed695b0_2 \
   seqtk seq -l0 /data/"$ASM" > "${NAME}".formatted.fa || { echo "Task 1 failed"; exit 1; }
 
 # Task 2: generateAssemblyEdges (gawk) - extract 1000 bp ends
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data quay.io/biocontainers/gawk:5.1.0--2 bash -c "
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data quay.io/biocontainers/gawk:5.1.0--2 bash -c "
   set -euo pipefail
   bases=1000
   cat /data/'${NAME}'.formatted.fa | gawk -v len=\"\$bases\" -F '' '{if (NR % 2 == 0) {for (i=1; i<=NF; i++) {if (i <= len || (NF-i) < len) {printf \$(i)}}; printf \"\\n\"}}' > /data/'${NAME}'.edges.tmp.txt
@@ -25,7 +28,7 @@ docker run --user 1004:1004 --rm -v $(pwd):/data -w /data quay.io/biocontainers/
 " || { echo "Task 2 failed"; exit 1; }
 
 # Task 3: runBioawk - unknown Ns, headers, lengths
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data quay.io/biocontainers/bioawk:1.0--h577a1d6_13 bash -c "
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data quay.io/biocontainers/bioawk:1.0--h577a1d6_13 bash -c "
   set -euo pipefail
   bioawk -c fastx '{n=gsub(/N/, \"\", \$seq); print \$name \"\\t\" n}' /data/'$ASM' > /data/'${NAME}'.unknown.txt
   bioawk -c fastx '{print \">\"\$name\"_start\";print \">\"\$name\"_end\";}' /data/'$ASM' > /data/'${NAME}'.headers.txt
@@ -33,25 +36,25 @@ docker run --user 1004:1004 --rm -v $(pwd):/data -w /data quay.io/biocontainers/
 " || { echo "Task 3 failed"; exit 1; }
 
 # Task 4: combineIntoFasta (paste) - headers + edges to FASTA
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data ubuntu \
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data ubuntu \
   bash -c "
     set -euo pipefail
     paste -d '\n' /data/'${NAME}'.headers.txt /data/'${NAME}'.edges.txt > /data/'${NAME}'.combined.fasta
   " || { echo "Task 4 failed"; exit 1; }
 
 # Task 5: runNCRF - detect TTAGGG telomeres in ends
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data --memory=16g quay.io/biocontainers/ncrf:1.01.02--h7b50bb2_6 bash -c "
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data --memory=16g quay.io/biocontainers/ncrf:1.01.02--h7b50bb2_6 bash -c "
   set -euo pipefail
   cat /data/'${NAME}'.combined.fasta | NCRF --stats=events TTAGGG | ncrf_summary > /data/'${NAME}'.telomeric.summary.txt
   tail -n +2 /data/'${NAME}'.telomeric.summary.txt | cut -f3 | sort | uniq > /data/'${NAME}'.telomeric.ends.txt
 " || { echo "Task 5 failed"; exit 1; }
 
 # Task 6: runMashMap - align to CHM13 for chrom assignment (PAF format)
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data --memory=24g --cpus=4 quay.io/biocontainers/mashmap:3.1.3--pl5321hb4818e0_2 \
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data --memory=24g --cpus=4 quay.io/biocontainers/mashmap:3.1.3--pl5321hb4818e0_2 \
   mashmap --threads 4 --perc_identity 95 --noSplit -r /data/"$REF" -q /data/"$ASM" -o /data/"${NAME}".mashmap.txt || { echo "Task 6 failed"; exit 1; }
 
 # Task 7: assessCompletness - build SUMMARY, filter T2T (both ends=2, contigs: Ns=0, scaffolds: Ns>0; chrom from mashmap f10)
-docker run --user 1004:1004 --rm -v $(pwd):/data -w /data ubuntu bash -c "
+docker run --user ${UID}:${GID} --rm -v $(pwd):/data -w /data ubuntu bash -c "
   set -euo pipefail
   cat /data/'${NAME}'.telomeric.ends.txt | while read line; do
     contig=\$(echo \$line | sed 's/_.*//')
