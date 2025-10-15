@@ -7,7 +7,7 @@ Requires Hs1 reference in the script root directory as "hs1.fa".
 `` wget https://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips/hs1.fa.gz ``  
 `` gunzip hs1.fa.gz ``
 
-```./gfa_to_fasta.sh <analysis_dir, if not provided defaults to ./spike_in_results``` # Iterate across assembly results dir and convert gfa hap1/2 files to fa.
+```./gfa_to_fasta.sh <analysis_dir, if not provided defaults to ./spike_in_results>``` # Iterate across assembly results dir and convert gfa hap1/2 files to fa.
 
 ``./t2t_assess <haplotype_fa>`` # haplotype fasta file, can be produced via awk (Hifiasm FAQs).  
 
