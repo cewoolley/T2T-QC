@@ -66,16 +66,30 @@ mashmap --threads 4 --perc_identity 95 --noSplit \
 
 echo "Task 7: assessCompleteness"
 
-while read -r line; do
-  contig=$(echo "$line" | sed 's/_.*//')
-  grep "$contig" "${NAME}.lengths.txt" | tr -d '\n'; echo -ne '\t'
-  grep "$contig" "${NAME}.unknown.txt" | tr -d '\n'; echo -ne '\t'
-  grep "$contig" "${NAME}.mashmap.txt" | tr -s '[:blank:]' '\t'
-done < "${NAME}.telomeric.ends.txt" \
-  | cut -f1,2,4,10 \
+{
+while IFS= read -r line; do
+  contig="${line%%_*}"  # strip "_start"/"_end"
+
+  # lengths: contig<tab>length  (fallback to contig<tab>NA)
+  { grep -m1 -F -w -- "$contig" "${NAME}.lengths.txt" || printf '%s\tNA\n' "$contig"; } | tr -d '\n'
+  printf '\t'
+
+  # unknown Ns: contig<tab>Ns  (fallback to contig<tab>NA)
+  { grep -m1 -F -w -- "$contig" "${NAME}.unknown.txt" || printf '%s\tNA\n' "$contig"; } | tr -d '\n'
+  printf '\t'
+
+  # mashmap PAF line for contig (first hit). If none, emit a stub with at least 10 fields so cut -f10 exists.
+  # PAF has >=12 fields; we only need to ensure field 10 exists.
+  { grep -m1 -F -- "$contig" "${NAME}.mashmap.txt" \
+    || printf '%s\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n' "$contig"; } \
+    | tr -s '[:blank:]' '\t'
+
+done < "${NAME}.telomeric.ends.txt"
+} | cut -f1,2,4,10 \
   | sort | uniq -c | sort -rgk1 \
   | tr -s '[:blank:]' '\t' | sed 's/^\t//' \
   > "${NAME}.SUMMARY.txt"
+
 
 echo -e 'name\tlength\tNs\tchromosome' > "${NAME}.T2T.scaffolds.txt"
 echo -e 'name\tlength\tNs\tchromosome' > "${NAME}.T2T.contigs.txt"
